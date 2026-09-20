@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Ioniq 5 Infotainment Docs</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.links{display:grid;gap:0}
+.link{display:grid;grid-template-columns:1fr auto;gap:4px 12px;padding:11px 0;border-bottom:1px solid var(--grid);text-decoration:none;color:var(--ink)}
+.link:last-child{border-bottom:none}
+.link b{font-weight:620}
+.link .d{grid-column:1/2;font-size:13px;color:var(--muted)}
+.link .tags{grid-row:1/3;grid-column:2;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.tag{font-size:11.5px;font-weight:650;border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--muted);white-space:nowrap}
+.tag.yr{color:var(--ink)}
+.link[hidden]{display:none}
+.facts td{white-space:normal;vertical-align:top}
+.facts td:first-child{font-weight:600;white-space:nowrap}
+.unc{font-size:11.5px;font-weight:650;color:var(--warn);display:inline-block}
+.facts.all{min-width:560px}
+.facts.only-gen5w .c-cc,.facts.only-ccnc .c-g5{display:none}
+ol.steps{margin:6px 0 0;padding-left:20px} ol.steps li{margin:4px 0}
+.note{font-size:13px;color:var(--muted);border-left:3px solid var(--line);padding:2px 0 2px 10px;margin-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>Infotainment &amp; owner docs</h1>
+    <div class="sub">Official Hyundai manuals, update tools and how-tos for the IONIQ 5, grouped by system generation.</div>
+  </div>
+
+  <div class="spread">
+    <div class="chips" id="gen" role="group" aria-label="Model year">
+      <button class="chip" data-g="all">All years</button>
+      <button class="chip" data-g="gen5w">2022–2024 · Gen5W</button>
+      <button class="chip" data-g="ccnc">2025+ · ccNC</button>
+    </div>
+    <span class="hint" id="detected"></span>
+  </div>
+
+  <section class="card">
+    <h2>At a glance</h2>
+    <div class="tablewrap"><table class="facts" id="facts">
+      <thead><tr><th></th><th class="c-g5">2022–2024 (Gen5W)</th><th class="c-cc">2025 and newer (ccNC)</th></tr></thead>
+      <tbody>
+        <tr><td>Center screen</td><td class="c-g5">12.3-inch touchscreen with navigation on all trims</td><td class="c-cc">12.3-inch touchscreen, new ccNC software</td></tr>
+        <tr><td>CarPlay / Android Auto</td><td class="c-g5">Standard. Wired (USB) <span class="unc">wireless not confirmed</span></td><td class="c-cc">Wireless standard (wired also works)</td></tr>
+        <tr><td>Map updates</td><td class="c-g5">Navigation Updater on a computer to USB/SD, or media by mail. <span class="unc">OTA maps unconfirmed for US</span></td><td class="c-cc">Over the air, plus USB updates from update.hyundai.com</td></tr>
+        <tr><td>Online navigation</td><td class="c-g5">HD Radio traffic data</td><td class="c-cc">June 2026 software update adds real-time online navigation (needs an active Bluelink plan)</td></tr>
+        <tr><td>Digital Key</td><td class="c-g5">Digital Key 1 (NFC), Limited (2022); SEL and Limited (2024)</td><td class="c-cc">Digital Key 2 (NFC, BLE and UWB) on SEL and above</td></tr>
+        <tr><td>Bluelink</td><td class="c-g5">2022–2023: legacy Bluelink, paid plan. 2024: Bluelink+</td><td class="c-cc">Bluelink+ (Basic is free; Advanced is free for original owners)</td></tr>
+        <tr><td>Other changes</td><td class="c-g5">J1772 / CCS1 charge port</td><td class="c-cc">NACS charge port, new steering wheel, shortcut buttons on the center console</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Summarized from Hyundai spec sheets, press releases and update notices linked below. Items marked in amber couldn't be confirmed from an official US source.</p>
+  </section>
+
+  <section class="cols two">
+    <div class="card">
+      <h2>Owner's manuals</h2>
+      <div class="links" data-list>
+        <a class="link" data-g="all" href="https://owners.hyundaiusa.com/us/en/resources/manuals-warranties?modelYear=2024&modelName=ioniq-5" target="_blank" rel="noopener">
+          <b>MyHyundai Manuals &amp; Warranties</b><span class="d">Pick your model year to get every official PDF (owner's manual, warranty, quick reference guide).</span><span class="tags"><span class="tag yr">All years</span></span></a>
+        <a class="link" data-g="gen5w" href="https://owners.hyundaiusa.com/content/dam/hyundai/us/myhyundai/manuals/glovebox-manual/2022/ioniq5/2022-Ioniq-5-Owners-Manual.pdf" target="_blank" rel="noopener">
+          <b>2022 IONIQ 5 Owner's Manual</b><span class="d">Direct PDF from Hyundai. If it won't open, use the Manuals &amp; Warranties page.</span><span class="tags"><span class="tag">PDF</span><span class="tag yr">2022</span></span></a>
+        <a class="link" data-g="gen5w" href="https://owners.hyundaiusa.com/content/dam/hyundai/us/myhyundai/manuals/glovebox-manual/2023/ioniq-5/2023-Ioniq5-(NE-EV)-OM.pdf" target="_blank" rel="noopener">
+          <b>2023 IONIQ 5 Owner's Manual</b><span class="d">Direct PDF from Hyundai.</span><span class="tags"><span class="tag">PDF</span><span class="tag yr">2023</span></span></a>
+        <a class="link" data-g="gen5w" href="https://owners.hyundaiusa.com/content/dam/hyundai/us/myhyundai/manuals/glovebox-manual/2024/ioniq-5/2024%20Ioniq%205%20OM.pdf" target="_blank" rel="noopener">
+          <b>2024 IONIQ 5 Owner's Manual</b><span class="d">Direct PDF from Hyundai.</span><span class="tags"><span class="tag">PDF</span><span class="tag yr">2024</span></span></a>
+        <a class="link" data-g="ccnc" href="https://ownersmanual.hyundai.com/manual/IONIQ%205?countryCode=B28&langCode=en_US&projCode=NE1&year=2025" target="_blank" rel="noopener">
+          <b>2025 IONIQ 5 web owner's manual (US)</b><span class="d">Hyundai's searchable online manual.</span><span class="tags"><span class="tag">Web</span><span class="tag yr">2025</span></span></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Quick reference &amp; welcome guides</h2>
+      <div class="links" data-list>
+        <a class="link" data-g="gen5w" href="https://owners.hyundaiusa.com/content/dam/hyundai/us/myhyundai/manuals/glovebox-manual/2022/ioniq5/2022-Ioniq-5-Quick-Reference-Guide.pdf" target="_blank" rel="noopener">
+          <b>2022 Quick Reference Guide</b><span class="d">Short guide to the controls and screens.</span><span class="tags"><span class="tag">PDF</span><span class="tag yr">2022</span></span></a>
+        <a class="link" data-g="gen5w" href="https://owners.hyundaiusa.com/content/dam/hyundai/us/myhyundai/manuals/glovebox-manual/2023/ioniq-5/2023%20Ioniq%205%20Quick%20Reference%20Guide.pdf" target="_blank" rel="noopener">
+          <b>2023 Quick Reference Guide</b><span class="d">Short guide to the controls and screens.</span><span class="tags"><span class="tag">PDF</span><span class="tag yr">2023</span></span></a>
+        <a class="link" data-g="ccnc" href="https://www.hyundaiusa.com/us/en/welcome-center/2025/ioniq-5/ioniq-5-limited-welcome-center" target="_blank" rel="noopener">
+          <b>2025 IONIQ 5 Welcome Center</b><span class="d">Quick reference guide, owner's manual downloads, and how-to videos (EV charge management, Bluelink+ app).</span><span class="tags"><span class="tag">Videos</span><span class="tag yr">2025</span></span></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Infotainment system guides</h2>
+      <div class="links" data-list>
+        <a class="link" data-g="all" href="https://update.hyundai.com/US/EN/updateGuide/wZZR9v" target="_blank" rel="noopener">
+          <b>Infotainment User Guide (US)</b><span class="d">Hyundai's guide on the update site. Covers both Gen5W and ccNC systems.</span><span class="tags"><span class="tag">Web</span><span class="tag yr">All years</span></span></a>
+        <a class="link" data-g="gen5w" href="https://ownersmanual.hyundai.com/ivi/STD_GEN5W/AVNT/USA/English/015_Content_mov.html" target="_blank" rel="noopener">
+          <b>Gen5W navigation how-to videos</b><span class="d">Wireless update, voice recognition, user profiles, home and split screen, map colors, calendar link.</span><span class="tags"><span class="tag">Videos</span><span class="tag yr">2022–2024</span></span></a>
+        <a class="link" data-g="ccnc" href="https://ownersmanual.hyundai.com/ivi/ccNC/AVNT/KOR/English/" target="_blank" rel="noopener">
+          <b>ccNC infotainment online manual</b><span class="d">Hyundai's English ccNC manual. This is the Korean-market edition, so some features differ from US cars.</span><span class="tags"><span class="tag">Web</span><span class="tag yr">2025+</span></span></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Map &amp; software updates</h2>
+      <div class="links" data-list>
+        <a class="link" data-g="all" href="https://update.hyundai.com/US/EN/Main" target="_blank" rel="noopener">
+          <b>Hyundai Navigation Updater</b><span class="d">Download the Updater for Mac or Windows, or get the latest maps and software for USB.</span><span class="tags"><span class="tag yr">All years</span></span></a>
+        <a class="link" data-g="all" href="https://owners.hyundaiusa.com/us/en/resources/technology-and-navigation/update-your-hyundai-vehicle-with-the-latest-map-update" target="_blank" rel="noopener">
+          <b>How to update your maps</b><span class="d">Step-by-step for the Navigation Updater, or ordering an update by mail.</span><span class="tags"><span class="tag yr">All years</span></span></a>
+        <a class="link" data-g="all" href="https://owners.hyundaiusa.com/us/en/resources/technology-and-navigation/over-the-air-ota-map-updates-using-bluelink" target="_blank" rel="noopener">
+          <b>Over-the-air map updates with Bluelink</b><span class="d">How OTA map updates work, and which cars get them.</span><span class="tags"><span class="tag">OTA</span></span></a>
+        <a class="link" data-g="ccnc" href="https://update.hyundai.com/US/EN/updateNoticeView/yKbK3y" target="_blank" rel="noopener">
+          <b>June 2026 software update notice</b><span class="d">Adds real-time online navigation. Lists 2025–26 IONIQ 5 and IONIQ 5 N (ccNC).</span><span class="tags"><span class="tag">Notice</span><span class="tag yr">2025–26</span></span></a>
+        <a class="link" data-g="ccnc" href="https://update.hyundai.com/US/EN/updateNoticeView/ySJZ3N" target="_blank" rel="noopener">
+          <b>October 2025 update notice</b><span class="d">ccNC update. Lists the 2025 IONIQ 5 N only.</span><span class="tags"><span class="tag">Notice</span><span class="tag yr">2025 N</span></span></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Bluelink</h2>
+      <div class="links" data-list>
+        <a class="link" data-g="all" href="https://www.hyundaiusa.com/us/en/bluelinkplus" target="_blank" rel="noopener">
+          <b>Bluelink+ overview</b><span class="d">Features and plans for 2024 and newer models.</span><span class="tags"><span class="tag yr">2024+</span></span></a>
+        <a class="link" data-g="gen5w" href="https://www.hyundaiusa.com/us/en/blue-link" target="_blank" rel="noopener">
+          <b>Bluelink (legacy)</b><span class="d">Features and pricing for 2023 and older models.</span><span class="tags"><span class="tag yr">2022–2023</span></span></a>
+        <a class="link" data-g="all" href="https://owners.hyundaiusa.com/us/en/page/blue-link" target="_blank" rel="noopener">
+          <b>MyHyundai Bluelink packages &amp; help</b><span class="d">Manage your plan and check package details.</span><span class="tags"><span class="tag yr">All years</span></span></a>
+        <a class="link" data-g="all" href="https://owners.hyundaiusa.com/us/en/resources/blue-link?modelYear=2024&modelName=ioniq-5" target="_blank" rel="noopener">
+          <b>Bluelink resources for IONIQ 5</b><span class="d">Guides and FAQs. Change the model year on the page.</span><span class="tags"><span class="tag yr">All years</span></span></a>
+        <a class="link" data-g="all" href="https://owners.hyundaiusa.com/us/en/resources/general-information/reset" target="_blank" rel="noopener">
+          <b>Bluelink &amp; head unit reset</b><span class="d">Hyundai's reset steps for when Bluelink or the screen stops responding.</span><span class="tags"><span class="tag">Troubleshooting</span></span></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Phone, CarPlay &amp; Digital Key</h2>
+      <div class="links" data-list>
+        <a class="link" data-g="all" href="https://owners.hyundaiusa.com/us/en/CarPlayLoggedOut" target="_blank" rel="noopener">
+          <b>Apple CarPlay &amp; Android Auto</b><span class="d">Hyundai's general setup and support page (not specific to the IONIQ 5).</span><span class="tags"><span class="tag yr">All years</span></span></a>
+        <a class="link" data-g="ccnc" href="https://owners.hyundaiusa.com/us/en/resources/technology-and-navigation/introducing-all-new-digital-key" target="_blank" rel="noopener">
+          <b>Digital Key 2</b><span class="d">Using your phone or watch as the key. Lists the 2025 IONIQ 5 and IONIQ 5 N.</span><span class="tags"><span class="tag yr">2025+</span></span></a>
+        <a class="link" data-g="gen5w" href="https://owners.hyundaiusa.com/us/en/resources/technology-and-navigation/hyundai-digital-key" target="_blank" rel="noopener">
+          <b>Digital Key (first generation)</b><span class="d">The NFC phone key on 2022–2024 Limited and SEL trims.</span><span class="tags"><span class="tag yr">2022–2024</span></span></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Spec sheets &amp; product guides</h2>
+      <div class="links" data-list>
+        <a class="link" data-g="gen5w" href="https://www.hyundainews.com/assets/documents/original/48174-2022Ioniq5ProductGuidefeatures090821.pdf" target="_blank" rel="noopener">
+          <b>2022 IONIQ 5 product guide</b><span class="d">Features by trim, including infotainment and V2L.</span><span class="tags"><span class="tag">PDF</span><span class="tag yr">2022</span></span></a>
+        <a class="link" data-g="gen5w" href="https://www.hyundainews.com/assets/documents/original/56232-2024IONIQ5Features062623.pdf" target="_blank" rel="noopener">
+          <b>2024 IONIQ 5 features</b><span class="d">What's standard on each trim.</span><span class="tags"><span class="tag">PDF</span><span class="tag yr">2024</span></span></a>
+        <a class="link" data-g="ccnc" href="https://www.hyundainews.com/assets/documents/original/63444-2025IONIQ5XRTLimited8272024finalmjab.pdf" target="_blank" rel="noopener">
+          <b>2025 IONIQ 5 &amp; XRT press release</b><span class="d">What changed in the refresh: wireless CarPlay/Android Auto, NACS port, Digital Key 2.</span><span class="tags"><span class="tag">PDF</span><span class="tag yr">2025</span></span></a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>How-to: common tasks</h2>
+      <details open><summary>Connect CarPlay or Android Auto</summary>
+        <ol class="steps">
+          <li><b>2022–2024:</b> plug the phone into the USB data port (not the charge-only port) with a data cable. Allow CarPlay on the phone when asked.</li>
+          <li><b>2025+:</b> for wireless, pair the phone over Bluetooth first, then turn on Phone Projection in the screen's device connection settings. The menu names vary a little by software version.</li>
+          <li>If it doesn't appear, check Phone Projection settings on the car, and on iPhone check Settings → General → CarPlay.</li>
+        </ol></details>
+      <details><summary>Update maps and software (USB)</summary>
+        <ol class="steps">
+          <li>Install the Navigation Updater from update.hyundai.com on your Mac or PC.</li>
+          <li>Sign in, choose your IONIQ 5 and model year, and download the update to a blank USB drive.</li>
+          <li>With the car on (READY), plug in the drive and follow the prompts. Don't turn the car off until it finishes.</li>
+        </ol></details>
+      <details><summary>Screen frozen or Bluelink not responding</summary>
+        <ol class="steps">
+          <li>Try Settings → Data/Network → Reconfigure first.</li>
+          <li>If the screen stays frozen, use the pinhole RESET button for 5–10 seconds, per Hyundai's reset page. Holding Map + Setup for 10 seconds also resets some systems.</li>
+          <li>Settings and presets usually stay. Bluelink may take a few minutes to reconnect.</li>
+        </ol>
+        <p class="note">Hyundai's reset page is general. <span class="unc">The exact reset buttons for the IONIQ 5 aren't confirmed</span>, so check your owner's manual if these don't match your car.</p></details>
+      <details><summary>Bluelink plans</summary>
+        <ol class="steps">
+          <li><b>2024+ (Bluelink+):</b> Basic features are free. Advanced features are free for the original owner. Certified pre-owned buyers get Advanced free for one year.</li>
+          <li><b>2022–2023 (legacy Bluelink):</b> a paid monthly plan. <span class="unc">Original complimentary period not confirmed</span></li>
+          <li>Map and multimedia OTA updates are free for 3 years, then paid. Safety and vehicle-system updates stay free.</li>
+        </ol></details>
+    </div>
+  </section>
+</main>
+
+<script src="shared.js"></script>
+<script>
+(() => {
+  IQ.nav("Docs");
+  const $ = id => document.getElementById(id);
+  let g = "all";
+  try { g = localStorage.getItem("ioniq.docsGen") || "all"; } catch {}
+  function apply() {
+    document.querySelectorAll("#gen .chip").forEach(c => c.setAttribute("aria-pressed", String(c.dataset.g === g)));
+    document.querySelectorAll("[data-list] .link").forEach(a => a.hidden = !(g === "all" || a.dataset.g === "all" || a.dataset.g === g));
+    $("facts").className = "facts " + (g === "all" ? "all" : "only-" + g);
+  }
+  $("gen").addEventListener("click", e => {
+    const c = e.target.closest(".chip"); if (!c) return;
+    g = c.dataset.g; try { localStorage.setItem("ioniq.docsGen", g); } catch {} apply();
+  });
+  apply();
+  // If connected, detect the model year from the car's status and preselect it (once).
+  if (IQ.cfg.repo && IQ.cfg.token) {
+    IQ.rawJSON("status.json").then(s => {
+      const y = +s.year; if (!y) return;
+      const gen = y >= 2025 ? "ccnc" : "gen5w";
+      $("detected").textContent = `Your car: ${y} IONIQ 5 (${gen === "ccnc" ? "ccNC" : "Gen5W"})`;
+      let saved = null; try { saved = localStorage.getItem("ioniq.docsGen"); } catch {}
+      if (!saved) { g = gen; apply(); }
+    }).catch(() => {});
+  }
+})();
+</script>
+</body>
+</html>

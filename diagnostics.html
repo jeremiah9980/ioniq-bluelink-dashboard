@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Ioniq 5 Diagnostics</title>
+<link rel="stylesheet" href="shared.css">
+<style>
+.health{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center}
+.health .icon{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:24px;background:var(--accent-soft)}
+.health.warn .icon{background:rgba(240,169,58,.18)} .health.bad .icon{background:rgba(255,107,95,.16)}
+@media (max-width:560px){.health{grid-template-columns:auto 1fr}.health .act{grid-column:1/-1}}
+.tree{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.6;overflow-x:auto}
+.tree details{margin-left:14px} .tree>details{margin-left:0}
+.tree summary{font-weight:500;font-family:inherit}
+.tree .leaf{margin-left:14px;white-space:nowrap}
+.tree .k{color:var(--muted)} .tree .s{color:var(--s3)} .tree .n{color:var(--s1)} .tree .b{color:var(--s2)} .tree .z{color:var(--faint)}
+.tree mark{background:var(--accent-soft);color:inherit;border-radius:3px}
+.wheel{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:320px}
+.wheel div{border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center;font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>Diagnostics</h1>
+    <div class="sub" id="subtitle">Every health signal Bluelink reports for your car</div>
+  </div>
+  <div id="banner" class="banner" style="display:none"></div>
+
+  <section class="card health" id="health" hidden>
+    <div class="icon" id="hIcon">✓</div>
+    <div><h3 id="hTitle" style="font-size:18px">–</h3><div class="sub" id="hSub"></div></div>
+    <div class="act"><button id="wake">Wake car &amp; refresh</button></div>
+  </section>
+
+  <section class="cols two" id="cards" hidden>
+    <div class="card"><h2>Trouble codes (DTC)</h2><div id="dtc"></div></div>
+    <div class="card"><h2>Warning lights</h2><div class="kv" id="warn"></div></div>
+    <div class="card"><h2>High-voltage battery</h2><div class="kv" id="hv"></div><p class="hint" id="hvNa"></p></div>
+    <div class="card">
+      <h2>12V battery</h2>
+      <div class="spread"><div class="stat" style="border:none;box-shadow:none;padding:0"><div class="v" id="auxNow">–</div><div class="s" id="auxNote"></div></div></div>
+      <div class="chart" id="cAux" style="margin-top:8px"></div>
+      <p class="hint">The 12V battery powers the car's computers and locks. Readings below about 60% are worth watching, and below about 50% the car may not start. Waking the car often with "refresh" drains it.</p>
+    </div>
+    <div class="card"><h2>Tires</h2><div class="wheel" id="tires"></div><p class="hint">Bluelink only sends a warning flag for each tire, not the actual pressure.</p></div>
+    <div class="card"><h2>Service &amp; odometer</h2><div class="kv" id="svc"></div></div>
+    <div class="card"><h2>Power &amp; ignition state</h2><div class="kv" id="pwr"></div><p class="hint" id="pwrNa"></p></div>
+    <div class="card"><h2>Climate &amp; comfort</h2><div class="kv" id="cmf"></div><p class="hint" id="cmfNa"></p></div>
+    <div class="card"><h2>Lights</h2><div class="kv" id="lmp"></div><p class="hint" id="lmpNa"></p></div>
+    <div class="card"><h2>Energy totals</h2><div class="kv" id="nrg"></div><p class="hint" id="nrgNa"></p></div>
+  </section>
+
+  <section class="card" id="histCard" hidden>
+    <h2>Warning history</h2>
+    <div class="tablewrap"><table id="tWarn"></table></div>
+  </section>
+
+  <section class="card" id="rawCard" hidden>
+    <div class="spread">
+      <h2 style="margin:0">Raw data from Bluelink</h2>
+      <div class="row">
+        <input type="search" id="q" placeholder="Search fields or values" aria-label="Search raw data">
+        <button id="expand">Expand all</button>
+        <button id="copy">Copy JSON</button>
+        <button id="dl">⬇︎ Download</button>
+      </div>
+    </div>
+    <p class="hint">This is Hyundai's full status payload, unedited. It includes your VIN and location, so be careful sharing it.</p>
+    <div class="tree" id="tree"></div>
+  </section>
+</main>
+
+<script src="shared.js"></script>
+<script>
+(() => {
+  const { esc, num, isNum, fmtDT, yes, status } = IQ;
+  IQ.nav("Diagnostics");
+  const $ = id => document.getElementById(id);
+  let DIAG = null;
+
+  const LABEL = {
+    ev_battery_percentage: ["Charge level", "%"], ev_battery_soh_percentage: ["State of health", "%"],
+    ev_battery_pack_voltage: ["Pack voltage", " V"], ev_battery_temperature_min: ["Cell temp (min)", "°"],
+    ev_battery_temperature_max: ["Cell temp (max)", "°"], ev_battery_water_temperature: ["Coolant temp", "°"],
+    ev_battery_heating_state: ["Battery heater", ""], ev_battery_chiller_rpm: ["Chiller speed", " rpm"],
+    ev_battery_winter_mode: ["Winter mode", ""], ev_battery_precondition_enabled: ["Battery preconditioning", ""],
+    ev_battery_capacity: ["Capacity", " kWh"], ev_battery_remain: ["Energy remaining", " kWh"],
+    ev_battery_is_charging: ["Charging", ""], ev_battery_is_plugged_in: ["Plugged in", ""],
+    ev_charging_power: ["Charging power", " kW"], ev_charging_current: ["Charging current setting", ""],
+    ev_charge_port_door_is_open: ["Charge port door open", ""], ev_v2l_discharge_limit: ["V2L discharge limit", "%"],
+    ev_v2l_status: ["V2L status", ""], ev_v2x_status: ["V2X status", ""],
+    engine_is_running: ["Motor running (ready)", ""], accessory_on: ["Accessory power", ""], ign3: ["IGN3 power", ""],
+    remote_ignition: ["Remote start active", ""], transmission_condition: ["Gear / transmission", ""],
+    sleep_mode_check: ["Sleep mode", ""], valet_mode_active: ["Valet mode", ""],
+    air_control_is_on: ["Climate running", ""], defrost_is_on: ["Defrost", ""], steering_wheel_heater_is_on: ["Heated steering wheel", ""],
+    back_window_heater_is_on: ["Rear window defroster", ""], side_mirror_heater_is_on: ["Mirror heaters", ""],
+    front_left_seat_status: ["Driver seat", ""], front_right_seat_status: ["Passenger seat", ""],
+    rear_left_seat_status: ["Rear left seat", ""], rear_right_seat_status: ["Rear right seat", ""],
+    headlamp_status: ["Headlights", ""], headlamp_left_low: ["Left low beam", ""], headlamp_right_low: ["Right low beam", ""],
+    headlamp_left_high: ["Left high beam", ""], headlamp_right_high: ["Right high beam", ""], stop_lamp_left: ["Left brake light", ""],
+    stop_lamp_right: ["Right brake light", ""], turn_signal_left_front: ["Front left signal", ""], turn_signal_right_front: ["Front right signal", ""],
+    turn_signal_left_rear: ["Rear left signal", ""], turn_signal_right_rear: ["Rear right signal", ""],
+    total_power_consumed: ["Total energy used", " kWh"], total_power_regenerated: ["Total regenerated", " kWh"],
+    power_consumption_30d: ["Energy used (30 days)", " kWh"], ev_power_consumption_battery_cooling: ["Battery cooling", " kWh"],
+    ev_power_consumption_battery_heater: ["Battery heating", " kWh"], ev_power_consumption_air_conditioning: ["Air conditioning", " kWh"],
+  };
+  const fmtVal = (v, unit) => {
+    if (v === true || v === false) return v ? "Yes" : "No";
+    if (isNum(v)) return num(v, 1) + (unit || "");
+    return esc(typeof v === "object" ? JSON.stringify(v) : v);
+  };
+  function kv(elId, obj, naId) {
+    const shown = [], missing = [];
+    Object.entries(obj || {}).forEach(([k, v]) => {
+      const [label, unit] = LABEL[k] || [k.replace(/_/g, " "), ""];
+      (v === null || v === undefined || v === "") ? missing.push(label) : shown.push(`<div>${esc(label)}</div><div class="val">${fmtVal(v, unit)}</div>`);
+    });
+    $(elId).innerHTML = shown.join("") || `<div class="muted">Nothing reported</div><div></div>`;
+    if (naId) $(naId).textContent = missing.length ? "Not reported by your car: " + missing.join(", ") + "." : "";
+  }
+
+  function render(d, hist) {
+    const v = d.vehicle || {};
+    $("subtitle").textContent = `${[v.year, v.name || v.model || "Ioniq 5"].filter(Boolean).join(" ")} · VIN …${String(v.vin || "").slice(-6)} · car reported ${IQ.ago(d.last_updated_at)}`;
+
+    // issues
+    const warnOn = Object.entries(d.warnings || {}).filter(([, on]) => on).map(([k]) => k);
+    const dtcN = +((d.dtc || {}).count || 0);
+    const aux = (d.aux_battery || {}).percent;
+    const issues = [...warnOn];
+    if (dtcN > 0) issues.unshift(`${dtcN} trouble code${dtcN > 1 ? "s" : ""}`);
+    if (isNum(aux) && aux < 60) issues.push(`12V battery at ${aux}%`);
+    const soh = (d.hv_battery || {}).ev_battery_soh_percentage;
+    if (isNum(soh) && soh < 85) issues.push(`Battery health ${soh}%`);
+    const lvl = dtcN > 0 ? "bad" : issues.length ? "warn" : "good";
+    $("health").className = "card health " + lvl;
+    $("hIcon").textContent = { good: "✓", warn: "⚠︎", bad: "⛔︎" }[lvl];
+    $("hTitle").textContent = lvl === "good" ? "No problems reported" : `${issues.length} thing${issues.length > 1 ? "s" : ""} to check`;
+    $("hSub").textContent = lvl === "good" ? `Checked ${IQ.ago(d.fetched_at)}. No trouble codes or warning lights.` : issues.join(" · ");
+
+    // DTC
+    const desc = (d.dtc || {}).descriptions;
+    const list = Array.isArray(desc) ? desc : desc && typeof desc === "object" ? Object.entries(desc).map(([k, x]) => `${k}: ${x}`) : desc ? [desc] : [];
+    $("dtc").innerHTML = (d.dtc || {}).count == null
+      ? `${status("na", "Not reported")}<p class="hint">Your car's Bluelink feed doesn't include trouble codes. A dealer scan or an OBD-II reader will show them.</p>`
+      : dtcN === 0 ? status("good", "No trouble codes")
+      : `${status("bad", `${dtcN} trouble code${dtcN > 1 ? "s" : ""}`)}<ul>${list.map(x => `<li>${esc(x)}</li>`).join("")}</ul><p class="hint">Contact your Hyundai dealer or check the MyHyundai app for details.</p>`;
+
+    // warnings
+    $("warn").innerHTML = Object.entries(d.warnings || {}).filter(([k]) => !/^Tire pressure/.test(k))
+      .map(([k, on]) => `<div>${esc(k)}</div><div class="val">${on ? status("warn", "On") : status("good", "OK")}</div>`).join("");
+
+    // tires
+    const tw = d.warnings || {};
+    const tire = (label, key) => `<div>${label}<br>${tw[key] || tw["Tire pressure (general)"] ? status("warn", "Low") : status("good", "OK")}</div>`;
+    $("tires").innerHTML = tire("Front left", "Tire pressure front left") + tire("Front right", "Tire pressure front right") +
+                           tire("Rear left", "Tire pressure rear left") + tire("Rear right", "Tire pressure rear right");
+
+    kv("hv", d.hv_battery, "hvNa");
+    kv("pwr", d.power_state, "pwrNa"); kv("cmf", d.comfort, "cmfNa"); kv("lmp", d.lamps, "lmpNa"); kv("nrg", d.energy_totals, "nrgNa");
+    const sv = d.service || {}, u = sv.unit || "mi";
+    $("svc").innerHTML = [["Odometer", v.odometer], ["Next service in", sv.next_service_distance], ["Since last service", sv.last_service_distance]]
+      .map(([k, x]) => `<div>${k}</div><div class="val">${isNum(x) ? num(x) + " " + u : '<span class="muted">not reported</span>'}</div>`).join("") +
+      `<div>Bluelink generation</div><div class="val">${esc(v.generation ?? "–")}</div>`;
+
+    // 12V
+    $("auxNow").innerHTML = isNum(aux) ? `${aux}<small>%</small>` : "–";
+    $("auxNote").innerHTML = !isNum(aux) ? "" : aux >= 70 ? status("good", "Healthy") : aux >= 60 ? status("warn", "Fair") : status("bad", "Low");
+    const auxPts = hist.filter(p => isNum(p.aux) && p._t > Date.now() - 30 * 864e5).map(p => ({ t: p._t, v: p.aux }));
+    IQ.lineChart($("cAux"), auxPts, { unit: "%", yMin: 0, yMax: 100, height: 130, label: "12V battery, last 30 days" });
+
+    // warning history
+    const W = {};
+    hist.forEach((p, i) => {
+      (p.warn || []).forEach(w => { const x = W[w] || (W[w] = { first: p._t, last: p._t, times: 0 }); x.last = p._t; x.times++; });
+      if (isNum(p.dtc) && p.dtc > 0) { const x = W["dtc"] || (W["dtc"] = { first: p._t, last: p._t, times: 0 }); x.last = p._t; x.times++; }
+    });
+    const lastP = hist[hist.length - 1] || {};
+    const rows = Object.entries(W).sort((a, b) => b[1].last - a[1].last);
+    const nice = w => w === "dtc" ? "Trouble code(s)" : w.replace(/_/g, " ").replace(/ is on$/, "").replace(/^./, c => c.toUpperCase());
+    $("tWarn").innerHTML = rows.length
+      ? `<thead><tr><th>Warning</th><th>First seen</th><th>Last seen</th><th class="num">Reports</th><th>Now</th></tr></thead><tbody>` +
+        rows.map(([w, x]) => `<tr><td>${esc(nice(w))}</td><td>${fmtDT(x.first)}</td><td>${fmtDT(x.last)}</td><td class="num">${x.times}</td><td>${
+          (w === "dtc" ? lastP.dtc > 0 : (lastP.warn || []).includes(w)) ? status("warn", "Active") : status("good", "Cleared")}</td></tr>`).join("") + "</tbody>"
+      : `<tr><td class="empty">No warnings in ${hist.length.toLocaleString()} status reports${hist[0] ? " since " + IQ.fmtD(hist[0]._t) : ""}.</td></tr>`;
+
+    // raw tree
+    renderTree();
+    ["health", "cards", "histCard", "rawCard"].forEach(id => $(id).hidden = false);
+  }
+
+  // ---------- raw JSON explorer
+  function node(key, val, q, depth) {
+    const hit = s => q && String(s).toLowerCase().includes(q);
+    const mark = s => { s = esc(s); if (!q) return s; const i = s.toLowerCase().indexOf(q); return i < 0 ? s : s.slice(0, i) + "<mark>" + s.slice(i, i + q.length) + "</mark>" + s.slice(i + q.length); };
+    if (val && typeof val === "object") {
+      const entries = Array.isArray(val) ? val.map((x, i) => [i, x]) : Object.entries(val);
+      const kids = entries.map(([k, x]) => node(k, x, q, depth + 1)).filter(Boolean);
+      if (q && !kids.length && !hit(key)) return "";
+      const open = q || depth < 1 ? " open" : "";
+      return `<details${open}><summary><span class="k">${mark(key)}</span> <span class="z">${Array.isArray(val) ? `[${val.length}]` : `{${entries.length}}`}</span></summary>${kids.join("")}</details>`;
+    }
+    if (q && !hit(key) && !hit(val)) return "";
+    const cls = typeof val === "number" ? "n" : typeof val === "boolean" ? "b" : val === null ? "z" : "s";
+    const shown = typeof val === "string" ? `"${mark(val)}"` : mark(String(val));
+    return `<div class="leaf"><span class="k">${mark(key)}:</span> <span class="${cls}">${shown}</span></div>`;
+  }
+  function renderTree() {
+    const q = $("q").value.trim().toLowerCase();
+    const raw = (DIAG && DIAG.raw) || {};
+    const html = Object.entries(raw).map(([k, v]) => node(k, v, q, 0)).join("");
+    $("tree").innerHTML = html || `<div class="empty">${q ? "No fields match." : "No raw data saved yet."}</div>`;
+  }
+  $("q").addEventListener("input", () => { clearTimeout(renderTree._t); renderTree._t = setTimeout(renderTree, 150); });
+  $("expand").onclick = () => {
+    const all = $("tree").querySelectorAll("details"), anyClosed = [...all].some(d => !d.open);
+    all.forEach(d => d.open = anyClosed); $("expand").textContent = anyClosed ? "Collapse all" : "Expand all";
+  };
+  $("copy").onclick = async () => {
+    try { await navigator.clipboard.writeText(JSON.stringify(DIAG.raw, null, 2)); IQ.toast("Raw JSON copied"); }
+    catch { IQ.toast("Copy isn't allowed here. Use Download instead."); }
+  };
+  $("dl").onclick = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(DIAG, null, 2)], { type: "application/json" }));
+    a.download = `ioniq5-diagnostics-${IQ.dayKey(Date.now())}.json`; document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  // wake (two-tap confirm, no browser dialogs)
+  let armed = 0;
+  $("wake").onclick = async () => {
+    if (Date.now() - armed > 4000) { armed = Date.now(); $("wake").textContent = "Tap again to wake the car"; setTimeout(() => ($("wake").textContent = "Wake car & refresh"), 4000); return; }
+    armed = 0; $("wake").disabled = true;
+    try { await IQ.dispatch("refresh"); IQ.toast("Asked the car for fresh data. Reload this page in about 1–2 minutes.", 7000); }
+    catch (e) { IQ.apiError(e, "command"); }
+    finally { $("wake").disabled = false; $("wake").textContent = "Wake car & refresh"; }
+  };
+
+  async function load() {
+    if (IQ.needAuth()) return;
+    try {
+      const [d, h] = await Promise.all([IQ.rawJSON("diagnostics.json"), IQ.rawText("history.jsonl").catch(() => "")]);
+      DIAG = d;
+      const hist = IQ.parseJSONL(h).map(p => ({ ...p, _t: +IQ.toDate(p.t) })).filter(p => !isNaN(p._t)).sort((a, b) => a._t - b._t);
+      IQ.banner(""); render(d, hist);
+    } catch (e) { IQ.apiError(e, "diagnostics"); }
+  }
+  load();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Ioniq 5 Report</title>
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<main>
+  <div class="spread">
+    <div>
+      <h1>Status report</h1>
+      <div class="sub" id="subtitle">Everything the car has reported, over time</div>
+    </div>
+    <div class="row">
+      <button id="csvHist">⬇︎ Status log CSV</button>
+      <button id="csvTrips">⬇︎ Trips CSV</button>
+    </div>
+  </div>
+
+  <div id="banner" class="banner" style="display:none"></div>
+
+  <div class="spread">
+    <div class="chips" id="range" role="group" aria-label="Time range">
+      <button class="chip" data-d="1">24 hours</button>
+      <button class="chip" data-d="7">7 days</button>
+      <button class="chip" data-d="30">30 days</button>
+      <button class="chip" data-d="90">90 days</button>
+      <button class="chip" data-d="0">All</button>
+    </div>
+    <span class="hint" id="coverage"></span>
+  </div>
+
+  <section class="stats" id="kpis"></section>
+
+  <section class="cols two">
+    <div class="card"><h2>Battery (%)</h2><div class="chart" id="cSoc"></div></div>
+    <div class="card"><h2 id="hRange">Range</h2><div class="chart" id="cRange"></div></div>
+    <div class="card"><h2>12V battery (%)</h2><div class="chart" id="cAux"></div></div>
+    <div class="card"><h2>Outside temperature (°)</h2><div class="chart" id="cTemp"></div></div>
+  </section>
+
+  <section class="card">
+    <div class="spread"><h2 style="margin:0">Energy used per day (kWh)</h2><span class="hint" id="energyNote"></span></div>
+    <div class="chart" id="cEnergy" style="margin-top:10px"></div>
+    <div class="legend" id="energyLegend"></div>
+  </section>
+
+  <section class="card">
+    <h2>Charging sessions</h2>
+    <div class="tablewrap"><table id="tCharge"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Daily summary</h2>
+    <div class="tablewrap"><table id="tDaily"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Trips</h2>
+    <div class="tablewrap"><table id="tTrips"></table></div>
+    <button class="more" id="moreTrips" hidden>Show more</button>
+  </section>
+
+  <section class="card">
+    <div class="spread">
+      <h2 style="margin:0">Event log</h2>
+      <select id="evFilter" aria-label="Filter events">
+        <option value="">All events</option><option>Security</option><option>Charging</option>
+        <option>Climate</option><option>Warnings</option><option>Commands</option>
+      </select>
+    </div>
+    <div class="tablewrap" style="margin-top:10px"><table id="tEvents"></table></div>
+    <button class="more" id="moreEvents" hidden>Show more</button>
+  </section>
+
+  <section class="card">
+    <h2>Full status log</h2>
+    <p class="hint" style="margin-top:-6px">One row per status the car reported. Hourly checks are skipped when the car hasn't reported anything new.</p>
+    <div class="tablewrap"><table id="tLog"></table></div>
+    <button class="more" id="moreLog" hidden>Show more</button>
+  </section>
+</main>
+
+<script src="shared.js"></script>
+<script>
+(() => {
+  const { esc, num, isNum, toDate, fmtDT, fmtD, dayKey, dur, yes, status } = IQ;
+  IQ.nav("Report");
+  const $ = id => document.getElementById(id);
+  const ENERGY = [
+    { key: "wh_drive", name: "Driving", color: "var(--s1)" },
+    { key: "wh_climate", name: "Climate", color: "var(--s2)" },
+    { key: "wh_accessories", name: "Electronics", color: "var(--s3)" },
+    { key: "wh_battery_care", name: "Battery care", color: "var(--s4)" },
+  ];
+  $("energyLegend").innerHTML = ENERGY.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("");
+
+  let ALL = { hist: [], trips: [], runs: [], status: {} };
+  let days = 7;
+  try { const d = localStorage.getItem("ioniq.reportDays"); if (d !== null) days = +d; } catch {}
+  const limits = { trips: 25, events: 40, log: 50 };
+
+  // ---------- derive
+  function inRange(rows, key) {
+    if (!days) return rows;
+    const from = Date.now() - days * 864e5;
+    return rows.filter(r => r._t >= from);
+  }
+
+  function chargingSessions(H) {
+    const out = []; let cur = null;
+    H.forEach((p, i) => {
+      const prev = H[i - 1];
+      const ch = yes(p.charging);
+      if (ch && !cur) cur = { start: p._t, soc0: prev && isNum(prev.soc) ? prev.soc : p.soc, kw: +p.kw || 0, inferred: false };
+      if (cur) { cur.kw = Math.max(cur.kw, +p.kw || 0); cur.soc1 = p.soc; cur.last = p._t; }
+      if (!ch && cur) { cur.end = p._t; cur.soc1 = p.soc; out.push(cur); cur = null; }
+      // inferred: battery rose ≥3 points between two reports without a charging flag in between
+      if (!ch && !cur && prev && !yes(prev.charging) && isNum(p.soc) && isNum(prev.soc) && p.soc - prev.soc >= 3)
+        out.push({ start: prev._t, end: p._t, soc0: prev.soc, soc1: p.soc, kw: 0, inferred: true });
+    });
+    if (cur) { cur.end = null; out.push(cur); }
+    return out;
+  }
+
+  function events(H, runs) {
+    const ev = [];
+    const add = (t, cat, text, kind = "") => ev.push({ t, cat, text, kind });
+    let auxLow = false;
+    H.forEach((p, i) => {
+      const q = H[i - 1]; if (!q) return;
+      if (p.locked !== undefined && q.locked !== undefined && yes(p.locked) !== yes(q.locked))
+        add(p._t, "Security", yes(p.locked) ? "Locked" : "Unlocked", yes(p.locked) ? "good" : "warn");
+      if (isNum(p.open) && isNum(q.open) && (p.open > 0) !== (q.open > 0))
+        add(p._t, "Security", p.open > 0 ? `${p.open} door/window/trunk/hood open` : "Everything closed", p.open > 0 ? "warn" : "good");
+      if (p.plugged !== undefined && q.plugged !== undefined && yes(p.plugged) !== yes(q.plugged))
+        add(p._t, "Charging", yes(p.plugged) ? "Plugged in" : "Unplugged");
+      if (yes(p.charging) !== yes(q.charging))
+        add(p._t, "Charging", yes(p.charging) ? `Charging started at ${num(q.soc)}%` : `Charging stopped at ${num(p.soc)}%`, yes(p.charging) ? "good" : "");
+      if ((p.lim_ac !== q.lim_ac && isNum(p.lim_ac) && isNum(q.lim_ac)) || (p.lim_dc !== q.lim_dc && isNum(p.lim_dc) && isNum(q.lim_dc)))
+        add(p._t, "Charging", `Charge limits changed to AC ${p.lim_ac}% / DC ${p.lim_dc}%`);
+      if (p.climate !== undefined && q.climate !== undefined && yes(p.climate) !== yes(q.climate))
+        add(p._t, "Climate", yes(p.climate) ? "Climate turned on" : "Climate turned off");
+      const w0 = new Set(q.warn || []), w1 = new Set(p.warn || []);
+      [...w1].filter(w => !w0.has(w)).forEach(w => add(p._t, "Warnings", "Warning on: " + w.replace(/_/g, " ").replace(/ is on$/, ""), "warn"));
+      [...w0].filter(w => !w1.has(w)).forEach(w => add(p._t, "Warnings", "Warning cleared: " + w.replace(/_/g, " ").replace(/ is on$/, ""), "good"));
+      if (isNum(p.aux)) {   // hysteresis: low below 60%, recovered at 65%+
+        if (!auxLow && p.aux < 60) { auxLow = true; add(p._t, "Warnings", `12V battery low (${p.aux}%)`, "warn"); }
+        else if (auxLow && p.aux >= 65) { auxLow = false; add(p._t, "Warnings", `12V battery recovered (${p.aux}%)`, "good"); }
+      }
+      if (isNum(p.dtc) && isNum(q.dtc) && p.dtc !== q.dtc) add(p._t, "Warnings", `Trouble codes: ${q.dtc} → ${p.dtc}`, p.dtc > 0 ? "bad" : "good");
+    });
+    runs.forEach(r => {
+      const ok = r.conclusion === "success", done = r.status === "completed";
+      add(+new Date(r.created_at), "Commands", `Command: ${r.display_title || "command"}`, !done ? "" : ok ? "good" : "bad");
+      ev[ev.length - 1].status = !done ? "running" : r.conclusion; ev[ev.length - 1].url = r.html_url;
+    });
+    return ev.sort((a, b) => b.t - a.t);
+  }
+
+  function daily(H, T, sessions) {
+    const D = {};
+    const get = k => D[k] || (D[k] = { day: k, miles: 0, trips: 0, wh: 0, regen: 0, socMin: null, socMax: null, tMin: null, tMax: null, added: 0, odo: [] });
+    H.forEach(p => {
+      const d = get(dayKey(p._t));
+      if (isNum(p.soc)) { d.socMin = d.socMin == null ? +p.soc : Math.min(d.socMin, p.soc); d.socMax = d.socMax == null ? +p.soc : Math.max(d.socMax, p.soc); }
+      if (isNum(p.otemp)) { d.tMin = d.tMin == null ? +p.otemp : Math.min(d.tMin, p.otemp); d.tMax = d.tMax == null ? +p.otemp : Math.max(d.tMax, p.otemp); }
+      if (isNum(p.odo)) d.odo.push(+p.odo);
+    });
+    T.forEach(t => { const d = get(dayKey(t._t)); d.trips++; d.miles += +t.distance || 0; d.wh += +t.wh_total || 0; d.regen += +t.wh_regen || 0; });
+    sessions.forEach(s => { if (isNum(s.soc1) && isNum(s.soc0) && s.soc1 > s.soc0) get(dayKey(s.end || s.last || s.start)).added += s.soc1 - s.soc0; });
+    Object.values(D).forEach(d => { if (!d.trips && d.odo.length > 1) d.miles = Math.max(...d.odo) - Math.min(...d.odo); });
+    return Object.values(D).sort((a, b) => b.day.localeCompare(a.day));
+  }
+
+  // ---------- render
+  function table(el, cols, rows, empty) {
+    if (!rows.length) { el.innerHTML = `<tr><td class="empty" colspan="${cols.length}">${empty}</td></tr>`; return; }
+    el.innerHTML = `<thead><tr>${cols.map(c => `<th class="${c.num ? "num" : ""}">${c.h}</th>`).join("")}</tr></thead><tbody>` +
+      rows.map(r => `<tr>${cols.map(c => `<td class="${c.num ? "num" : ""}">${c.f(r)}</td>`).join("")}</tr>`).join("") + "</tbody>";
+  }
+
+  function render() {
+    document.querySelectorAll("#range .chip").forEach(c => c.setAttribute("aria-pressed", String(+c.dataset.d === days)));
+    const s = ALL.status || {}, du = s.odometer_unit || "mi", ru = (s.battery || {}).range_unit || du;
+    const H = inRange(ALL.hist), T = inRange(ALL.trips), R = inRange(ALL.runs);
+    const t0 = days ? Date.now() - days * 864e5 : (H[0] || T[0] || { _t: Date.now() - 864e5 })._t, t1 = Date.now();
+    const first = ALL.hist[0];
+    $("coverage").textContent = first ? `${ALL.hist.length.toLocaleString()} status reports since ${fmtD(first._t)}` : "";
+    $("subtitle").textContent = [s.year, s.name || "Ioniq 5"].filter(Boolean).join(" ") + " · everything the car has reported, over time";
+
+    // KPIs
+    const sessions = chargingSessions(H);
+    const tripMiles = T.reduce((a, t) => a + (+t.distance || 0), 0);
+    const odos = H.map(p => +p.odo).filter(v => v > 0);
+    const miles = T.length ? tripMiles : (odos.length > 1 ? Math.max(...odos) - Math.min(...odos) : 0);
+    const kwh = T.reduce((a, t) => a + (+t.wh_total || 0), 0) / 1000;
+    const regen = T.reduce((a, t) => a + (+t.wh_regen || 0), 0) / 1000;
+    const socs = H.map(p => p.soc).filter(isNum).map(Number);
+    const auxs = H.map(p => p.aux).filter(isNum).map(Number);
+    let unlockedMs = 0;
+    H.forEach((p, i) => { const n = H[i + 1]; if (p.locked === false || p.locked === "false") unlockedMs += Math.min((n ? n._t : Date.now()) - p._t, 6 * 3600e3); });
+    const added = sessions.reduce((a, x) => a + (isNum(x.soc1) && isNum(x.soc0) ? Math.max(0, x.soc1 - x.soc0) : 0), 0);
+    const stat = (k, v, unit, sub) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}${unit ? `<small>${unit}</small>` : ""}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
+    $("kpis").innerHTML = [
+      stat("Distance driven", num(miles, 1), du, `${T.length} trip${T.length === 1 ? "" : "s"}`),
+      stat("Energy used", num(kwh, 1), "kWh", kwh > 0 && miles > 0 ? `${num(miles / kwh, 2)} ${du}/kWh` : "from trip data"),
+      stat("Regen recovered", num(regen, 1), "kWh", kwh > 0 ? `${num((regen / kwh) * 100)}% of energy used` : ""),
+      stat("Charging sessions", sessions.length, "", added ? `+${num(added)}% battery added` : ""),
+      stat("Average battery", socs.length ? num(socs.reduce((a, b) => a + b, 0) / socs.length) : "–", "%", socs.length ? `low ${Math.min(...socs)}% · high ${Math.max(...socs)}%` : ""),
+      stat("Lowest 12V", auxs.length ? Math.min(...auxs) : "–", "%", auxs.length && Math.min(...auxs) < 60 ? status("warn", "watch this") : ""),
+      stat("Time unlocked", dur(unlockedMs / 60000), "", "between reports"),
+      stat("Status reports", H.length.toLocaleString(), "", `${R.length} command${R.length === 1 ? "" : "s"} sent`),
+    ].join("");
+
+    // charts
+    const series = k => H.map(p => ({ t: p._t, v: p[k] }));
+    $("hRange").textContent = `Range (${ru})`;
+    const opts = (x) => ({ t0, t1, ...x });
+    IQ.lineChart($("cSoc"), series("soc"), opts({ unit: "%", yMin: 0, yMax: 100, label: "Battery percent over time" }));
+    IQ.lineChart($("cRange"), series("range"), opts({ unit: " " + ru, axisUnit: "", yMin: 0, label: "Range over time" }));
+    IQ.lineChart($("cAux"), series("aux"), opts({ unit: "%", yMin: 0, yMax: 100, label: "12V battery percent over time" }));
+    IQ.lineChart($("cTemp"), series("otemp"), opts({ unit: "°", label: "Outside temperature over time", area: false }));
+
+    // energy per day
+    const byDay = {};
+    T.forEach(t => { const k = dayKey(t._t); const d = byDay[k] || (byDay[k] = { k, parts: ENERGY.map(() => 0) }); ENERGY.forEach((e, i) => d.parts[i] += (+t[e.key] || 0) / 1000); });
+    const eRows = Object.values(byDay).sort((a, b) => a.k.localeCompare(b.k)).map(d => ({
+      label: toDate(d.k + "T12:00").toLocaleDateString(undefined, { month: "numeric", day: "numeric" }), title: fmtD(d.k + "T12:00"), parts: d.parts }));
+    IQ.stackedBars($("cEnergy"), eRows, ENERGY, { unit: "kWh", label: "Energy used per day by category" });
+    $("energyNote").textContent = T.length ? "Hover a bar for the breakdown" : "";
+
+    // charging table
+    table($("tCharge"), [
+      { h: "Started", f: x => fmtDT(x.start) },
+      { h: "Ended", f: x => x.end ? fmtDT(x.end) : status("good", "Charging now") },
+      { h: "Battery", num: 1, f: x => `${num(x.soc0)}% → ${num(x.soc1)}%` },
+      { h: "Added", num: 1, f: x => isNum(x.soc1) && isNum(x.soc0) ? `+${num(x.soc1 - x.soc0)}%` : "–" },
+      { h: "Duration", num: 1, f: x => dur(((x.end || x.last || Date.now()) - x.start) / 60000) },
+      { h: "Peak power", num: 1, f: x => x.kw ? num(x.kw, 1) + " kW" : "–" },
+      { h: "", f: x => x.inferred ? `<span class="hint">estimated from battery change</span>` : "" },
+    ], sessions.slice().reverse(), "No charging sessions in this range.");
+
+    // daily
+    table($("tDaily"), [
+      { h: "Day", f: d => fmtD(d.day + "T12:00") },
+      { h: "Distance", num: 1, f: d => num(d.miles, 1) + " " + du },
+      { h: "Trips", num: 1, f: d => d.trips || "–" },
+      { h: "Energy", num: 1, f: d => d.wh ? num(d.wh / 1000, 1) + " kWh" : "–" },
+      { h: "Efficiency", num: 1, f: d => d.wh && d.miles ? num(d.miles / (d.wh / 1000), 2) + ` ${du}/kWh` : "–" },
+      { h: "Battery range", num: 1, f: d => d.socMin == null ? "–" : `${d.socMin}–${d.socMax}%` },
+      { h: "Charged", num: 1, f: d => d.added ? `+${num(d.added)}%` : "–" },
+      { h: "Outside", num: 1, f: d => d.tMin == null ? "–" : `${num(d.tMin)}–${num(d.tMax)}°` },
+    ], daily(H, T, sessions), "No data in this range.");
+
+    // trips
+    const TT = T.slice().reverse();
+    table($("tTrips"), [
+      { h: "Started", f: t => fmtDT(t._t) },
+      { h: "Distance", num: 1, f: t => num(t.distance, 1) + " " + du },
+      { h: "Driving", num: 1, f: t => dur(t.drive_min) },
+      { h: "Idle", num: 1, f: t => dur(t.idle_min) },
+      { h: "Avg / max speed", num: 1, f: t => `${num(t.avg_speed)} / ${num(t.max_speed)}` },
+      { h: "Energy", num: 1, f: t => isNum(t.wh_total) ? num(t.wh_total / 1000, 2) + " kWh" : "–" },
+      { h: "Efficiency", num: 1, f: t => t.wh_total > 0 ? num(t.distance / (t.wh_total / 1000), 2) + ` ${du}/kWh` : "–" },
+      { h: "Regen", num: 1, f: t => isNum(t.wh_regen) ? num(t.wh_regen / 1000, 2) + " kWh" : "–" },
+    ], TT.slice(0, limits.trips), "No trips in this range. Trip details come from Hyundai's trip feed and may take a day to appear.");
+    $("moreTrips").hidden = TT.length <= limits.trips;
+
+    // events
+    const cat = $("evFilter").value;
+    const EV = events(H, R).filter(e => !cat || e.cat === cat);
+    table($("tEvents"), [
+      { h: "When", f: e => fmtDT(e.t) },
+      { h: "Type", f: e => `<span class="hint">${e.cat}</span>` },
+      { h: "Event", f: e => e.kind ? status(e.kind, e.text) : esc(e.text) },
+      { h: "", f: e => e.url ? `<a href="${e.url}" target="_blank" rel="noopener">${esc(e.status)} ↗</a>` : "" },
+    ], EV.slice(0, limits.events), "No changes recorded in this range.");
+    $("moreEvents").hidden = EV.length <= limits.events;
+
+    // full log
+    const L = H.slice().reverse();
+    const b = v => v === undefined || v === null ? "–" : yes(v) ? "Yes" : "No";
+    table($("tLog"), [
+      { h: "Reported", f: p => fmtDT(p._t) },
+      { h: "Source", f: p => `<span class="hint">${esc(p.src || "status")}</span>` },
+      { h: "Battery", num: 1, f: p => isNum(p.soc) ? p.soc + "%" : "–" },
+      { h: "Range", num: 1, f: p => num(p.range) },
+      { h: "Charging", f: p => b(p.charging) },
+      { h: "Plugged", f: p => b(p.plugged) },
+      { h: "Locked", f: p => p.locked === undefined ? "–" : yes(p.locked) ? "Yes" : status("warn", "No") },
+      { h: "Open", num: 1, f: p => isNum(p.open) ? (p.open ? status("warn", String(p.open)) : "0") : "–" },
+      { h: "Climate", f: p => b(p.climate) },
+      { h: "Outside", num: 1, f: p => isNum(p.otemp) ? num(p.otemp) + "°" : "–" },
+      { h: "12V", num: 1, f: p => isNum(p.aux) ? p.aux + "%" : "–" },
+      { h: "Odometer", num: 1, f: p => num(p.odo) },
+      { h: "Warnings", f: p => (p.warn || []).length ? status("warn", p.warn.length + "") : "–" },
+    ], L.slice(0, limits.log), "No status reports in this range.");
+    $("moreLog").hidden = L.length <= limits.log;
+  }
+
+  // ---------- wiring
+  $("range").addEventListener("click", e => {
+    const c = e.target.closest(".chip"); if (!c) return;
+    days = +c.dataset.d; try { localStorage.setItem("ioniq.reportDays", days); } catch {}
+    Object.assign(limits, { trips: 25, events: 40, log: 50 }); render();
+  });
+  $("evFilter").onchange = render;
+  $("moreTrips").onclick = () => { limits.trips += 50; render(); };
+  $("moreEvents").onclick = () => { limits.events += 80; render(); };
+  $("moreLog").onclick = () => { limits.log += 100; render(); };
+  $("csvHist").onclick = () => IQ.downloadCSV(`ioniq5-status-log-${IQ.dayKey(Date.now())}.csv`, inRange(ALL.hist),
+    ["t", "seen", "src", "soc", "range", "charging", "plugged", "kw", "lim_ac", "lim_dc", "odo", "locked", "open", "climate", "otemp", "aux", "soh", "lat", "lon", "warn", "dtc"]);
+  $("csvTrips").onclick = () => IQ.downloadCSV(`ioniq5-trips-${IQ.dayKey(Date.now())}.csv`, inRange(ALL.trips),
+    ["start", "distance", "odo", "drive_min", "idle_min", "avg_speed", "max_speed", "wh_total", "wh_drive", "wh_climate", "wh_accessories", "wh_battery_care", "wh_regen"]);
+
+  async function load() {
+    if (IQ.needAuth()) return;
+    try {
+      const [status, hist, trips, runs] = await Promise.all([
+        IQ.rawJSON("status.json"),
+        IQ.rawText("history.jsonl").catch(() => ""),
+        IQ.rawText("trips.jsonl").catch(() => ""),
+        IQ.gh(`/repos/${IQ.cfg.repo}/actions/workflows/command.yml/runs?per_page=100`).then(r => r.json()).catch(() => ({ workflow_runs: [] })),
+      ]);
+      ALL.status = status;
+      ALL.hist = IQ.parseJSONL(hist).map(p => ({ ...p, _t: +toDate(p.t) })).filter(p => !isNaN(p._t)).sort((a, b) => a._t - b._t);
+      ALL.trips = IQ.parseJSONL(trips).map(t => ({ ...t, _t: +toDate(t.start) })).filter(t => !isNaN(t._t)).sort((a, b) => a._t - b._t);
+      ALL.runs = (runs.workflow_runs || []).map(r => ({ ...r, _t: +new Date(r.created_at) }));
+      IQ.banner(""); render();
+    } catch (e) { IQ.apiError(e, "status data"); }
+  }
+  load();
+})();
+</script>
+</body>
+</html>
